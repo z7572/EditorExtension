@@ -11,6 +11,7 @@ namespace EditorExtension;
 
 public static class Helper
 {
+    public static Material skyBoxMat;
     private static readonly MethodInfo _castRaycastMethod;
 
     static Helper()
