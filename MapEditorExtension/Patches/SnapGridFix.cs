@@ -59,7 +59,7 @@ public static class SnapGridFix
 
     private static IEnumerator PlayTestEndedFixRoutine()
     {
-        // 延迟一帧，等待原版视口和你的 DynamicViewportManager 结算完毕
+        // 等待 DynamicViewportManager 等逻辑执行完毕
         yield return new WaitForEndOfFrame();
         yield return null;
 
@@ -67,16 +67,15 @@ public static class SnapGridFix
         if (lc == null) yield break;
 
         var traverse = Traverse.Create(lc);
-
-        // 1. 强制重建笔刷：洗掉 Playtest 期间对笔刷缩放和组件造成的污染
+        // 1. 恢复笔刷 (Playtest 期间笔刷被隐藏)
         traverse.Method("MakeNewBrush").GetValue();
 
-        // 2. 重新唤醒网格显示并刷新边角判定
+        // 2. 恢复网格和捕捉点
         bool showGrid = traverse.Field<bool>("m_ShowGrid").Value;
         lc.ShowGrid(showGrid);
         try { lc.GenerateSnapCornersFaces(); } catch { }
 
-        // 3. 修复 Ground 草皮错位
+        // 3. 修复Ground视觉问题
         if (LevelManager.Instance != null && LevelManager.Instance.PlacedLevelObjects != null)
         {
             int count = LevelManager.Instance.NumberOfPlacedObjects;
@@ -87,11 +86,18 @@ public static class SnapGridFix
                 {
                     var traverseObj = Traverse.Create(lo);
                     GameObject attachedGround = traverseObj.Field<GameObject>("m_AttachedGround").Value;
-
                     if (attachedGround != null)
                     {
-                        // 销毁旧的错位草皮，原地生成完美对齐的新草皮
+                        // 销毁旧的草皮网格
                         UnityEngine.Object.Destroy(attachedGround);
+
+                        // 核心修复：在重新 InitGround 之前，利用记录的偏移量把物体位置恢复到下降前的高度
+                        Vector3 currentPos = lo.VisibleObject.transform.position;
+                        currentPos.x += lo.LevelObjectOffsetFromPosition.x;
+                        currentPos.y += lo.LevelObjectOffsetFromPosition.y;
+                        lo.VisibleObject.transform.position = currentPos;
+
+                        // 重新生成草皮（此时会以正确的高度再次下降）
                         traverseObj.Method("InitGround").GetValue();
                         lo.UpdateGround();
                     }
